@@ -16,10 +16,8 @@ name as a system executable command or script.
 It authorizes based on the name it was invoked with, along with all the arguments
 (up to 250 characters).
 .P
-The authorization username is derived by looking up the auid
-returned by audit_getloginuid(), or if that is not set, then
-the real uid returned by getresuid().  The uid is looked up
-via getpwuid(), and the pw_name field is what is used.
+The authorization username is taken from the pw_name field of the structure
+returned by getpwuid(geteuid()).
 .SH OPTIONS
 There are no options to this command, any arguments are passed
 to the real underlying command.
@@ -84,8 +82,7 @@ at least one secret follows the servers, the most recently listed secret is
 used).
 .P
 Since this configuration file is normally readable only by root, this command
-must be installed setuid root.   Root privileges are dropped as soon as the
-configuration file is read.
+must be installed with capability CAP_DAC_OVERRIDE.
 .SH SEE ALSO
 .BR poll (2),
 .IR tacplus-restrict (8)

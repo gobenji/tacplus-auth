@@ -39,7 +39,7 @@
 #include <pwd.h>
 #include <errno.h>
 #include <limits.h>
-#include <libaudit.h>
+#include <sys/capability.h>
 #include <sys/stat.h>
 
 #include <tacplus/libtac.h>
@@ -59,7 +59,7 @@ typedef struct {
 static tacplus_server_t tac_srv[TAC_PLUS_MAXSERVERS];
 static int tac_srv_no, tac_key_no;
 static int debug = 0;
-static uid_t auth_uid;
+static char vrfname[64];
 
 static const char *progname = "tacplus-auth"; /* for syslogs and errors */
 
@@ -123,6 +123,8 @@ tacplus_config(const char *cfile, int level)
                 }
             }
         }
+        else if(!strncmp(lbuf, "vrf=", 4))
+            strncpy(vrfname, lbuf + 4, sizeof(vrfname) - 1);
         else if(!strncmp(lbuf, "server=", 7)) {
             if(tac_srv_no < TAC_PLUS_MAXSERVERS) {
                 struct addrinfo hints, *servers, *server;
@@ -163,8 +165,7 @@ tacplus_config(const char *cfile, int level)
                     "skipping\n", progname, TAC_PLUS_MAXSERVERS);
             }
         }
-        else if(!strncmp(lbuf, "vrf=", 4) ||
-            !strncmp(lbuf, "user_homedir=", 13))
+        else if(!strncmp(lbuf, "user_homedir=", 13))
             ; /*  we don't use these options, but don't complain below */
         else if(debug) /* ignore unrecognized lines, unless debug on */
             fprintf(stderr, "%s: unrecognized parameter: %s\n",
@@ -176,47 +177,6 @@ tacplus_config(const char *cfile, int level)
             progname, configfile);
 
     fclose(conf);
-}
-
-/*
- * Drop our privileges, since we expect to be setuid.
- * Don't worry about groups.  If somebody chooses to
- * make us setgid also, that's the admin's choice.
- * if the auth_uid is -1, set it to the ruid.
- * If getresuid() fails, but getuid and geteuid work
- * and are equal, and not 0, continue.
- *
- * We also do nothing about any privileges that might be set
- * via setcap on our executable, or from the original user.
- */
-void
-drop_privilege(void)
-{
-    uid_t ruid, euid, suid;
-
-    if (getresuid(&ruid, &euid, &suid)) {
-        perror("Unable to get original uid");
-        euid = geteuid();
-        if (euid == (uid_t)-1)
-            exit(1);
-        ruid = getuid();
-        if (euid != ruid || ruid == (uid_t)-1)
-            exit(1);
-        if (ruid == 0) {
-            fprintf(stderr, "%s: Real uid is 0, exiting\n", progname);
-            exit(1);
-        }
-    }
-    else if (setreuid(ruid, ruid)) {
-        perror("Unable to drop privilege");
-        exit(1);
-    }
-    if (auth_uid == (uid_t)-1) {
-        auth_uid = ruid;
-        if (debug)
-            fprintf(stderr, "%s: audit uid is not set, using realuid=%u\n",
-                progname, ruid);
-    }
 }
 
 static int
@@ -357,27 +317,55 @@ findcmd(char *cmd, char *path, size_t pathlen)
     return 1;
 }
 
+static void
+cap_drop(cap_t cap_p, cap_value_t cap_name)
+{
+    cap_value_t caps[] = { cap_name };
+    int retval;
+
+    retval = cap_set_flag(cap_p, CAP_EFFECTIVE, 1, caps, CAP_CLEAR);
+    if (retval) {
+        fprintf(stderr, "%s: Error: while clearing capability flag %u: %s\n",
+                progname, cap_name, strerror(errno));
+        exit(1);
+    }
+    retval = cap_set_proc(cap_p);
+    if (retval) {
+        fprintf(stderr, "%s: Error: while clearing capability %u: %s\n",
+                progname, cap_name, strerror(errno));
+        exit(1);
+    }
+}
+
 int
 main(int argc, char *argv[])
 {
     struct passwd *pw;
     char path[PATH_MAX], *cmd;
+    uid_t euid;
+    cap_t caps;
     int ret;
 
     if(getenv("TACACSAUTHDEBUG")) /* if present, with any value */
         debug = 1;
 
-    tacplus_config(configfile, 0);
-
-    auth_uid = audit_getloginuid(); /* drop_privilege will set if this fails */
-    drop_privilege();
-
-    pw = getpwuid(auth_uid);
-    if (pw == NULL || !pw->pw_name[0]) {
-        fprintf(stderr, "%s: Unable to find username for uid=%u\n",
-            progname, auth_uid);
+    caps = cap_get_proc();
+    if (!caps) {
+        fprintf(stderr, "%s: Error: could not get capabilities: %s\n",
+                progname, strerror(errno));
         exit(1);
     }
+
+    euid = geteuid();
+    pw = getpwuid(euid);
+    if (pw == NULL || !pw->pw_name[0]) {
+        fprintf(stderr, "%s: Unable to find username for uid=%u\n", progname,
+                euid);
+        exit(1);
+    }
+
+    tacplus_config(configfile, 0);
+    cap_drop(caps, CAP_DAC_OVERRIDE);
 
     /*
      * convert the command name to the basename (relative) for
@@ -402,6 +390,7 @@ main(int argc, char *argv[])
 
     /* accumulate command, and do auth; */
     ret = build_auth_req(pw->pw_name, cmd, argv, argc);
+    cap_drop(caps, CAP_NET_RAW);
     if (ret == 0) {
         if (debug)
             fprintf(stderr, "%s: %s authorized, executing\n",
@@ -504,17 +493,20 @@ send_tacacs_auth(const char *user, const char *tty, const char *host,
 
     for(srv_i = 0; srv_i < tac_srv_no; srv_i++) {
         srv_fd = tac_connect_single(tac_srv[srv_i].addr, tac_srv[srv_i].key,
-            NULL, NULL);
+            NULL, vrfname[0] ? vrfname : NULL);
         if(srv_fd < 0) {
             /*
              * This is annoying in the middle of a command, so
              * only print for debug.
             */
-            if(debug)
-                fprintf(stderr, "%s: error connecting to %s to request"
-                    " authorization for %s: %s\n", progname,
-                    tac_ntop(tac_srv[srv_i].addr->ai_addr),
-                    cmd, strerror(errno));
+            if(debug) {
+                fprintf(stderr, "%s: error connecting to %s ", progname,
+                    tac_ntop(tac_srv[srv_i].addr->ai_addr));
+                if (vrfname[0])
+                    fprintf(stderr, "using vrf %s ", vrfname);
+                fprintf(stderr, "to request authorization for %s: %d %d\n",
+                        cmd, srv_fd, errno);
+            }
             continue;
         }
         servers++;

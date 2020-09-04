@@ -5,7 +5,6 @@ EXTRA_DIST = ChangeLog README
 
 tacplus_auth_SOURCES = tacplus-auth.c
 tacplus_auth_CFLAGS = -O -Wall -Werror
-tacplus_auth_LDADD = -ltac -laudit
 sbin_PROGRAMS = tacplus-auth
 sbin_SCRIPTS = tacplus-restrict
 man_MANS = tacplus-auth.8
@@ -21,5 +20,4 @@ MAINTAINERCLEANFILES = Makefile.in config.h.in configure aclocal.m4 \
                        config/install-sh config/ltmain.sh config/missing
 
 install-exec-hook:
-	chown root.root $(DESTDIR)$(sbindir)/tacplus-auth
-	chmod 4755 $(DESTDIR)$(sbindir)/tacplus-auth
+	setcap cap_dac_override,cap_net_raw+ep $(DESTDIR)$(sbindir)/tacplus-auth

@@ -3,14 +3,14 @@ Section: admin
 Priority: optional
 Maintainer: Dave Olson <olson@cumulusnetworks.com>
 Build-Depends: debhelper (>= 9), autotools-dev, autoconf,
-    libtac-dev (>= 1.4.1~), libpam-tacplus-dev, libaudit-dev,
-    dpkg-dev (>= 1.16.1~)
+    libtac-dev (>= 1.4.1~), libpam-tacplus-dev, dpkg-dev (>= 1.16.1~),
+    libcap-dev, libcap2-bin
 Standards-Version: 3.9.6
 Homepage: https://github.com/daveolson53/tacplus-auth
 
 Package: tacplus-auth
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libtac2 (>= 1.4.1~), libaudit1
+Depends: ${shlibs:Depends}, ${misc:Depends}, libtac2 (>= 1.4.1~), libcap2-bin
 Description: Front end command for TACACS+ per-command authorization
  This package enables per-command authorization of commands via
  a TACACS+ server.  Authorization is done by linking or symlinking

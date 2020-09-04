@@ -1,9 +1,8 @@
 tacplus-auth v1.0.0
 Oct 13, 2016
 
-The user name for tacacs accounting is that returned by getpwuid()
-with the uid returned by audit_getloginuid(), or if no auid, using
-the real uid returned by getresuid().
+The user name for tacacs accounting is that returned by getpwuid() with the
+effective uid.
 
 It's expected this command will normally be used after login authenticated
 via a tacacs server, and if the pam_tacplus plugin is used, the auid will
@@ -27,10 +26,8 @@ It uses the libtac.so shared library from a modified libpam_tacplus
 package.
 
 There is no configuration file for this program, it uses /etc/tacplus_servers
-for the list of servers and keys, and for debug.
-tacplus-auth should be setuid root, so that the config file can be opened.
-
-Privileges are dropped as soon as the configuration file is read.
+for the list of servers and keys, and for debug. tacplus-auth is installed
+with the capability CAP_DAC_OVERRIDE so that the config file can be opened.
 
 
 Option		        Description
@@ -46,6 +43,11 @@ secret=STRING    can be specified more than once;
 server=IP_ADDR   can be specified more than once;
                  adds a TACACS+ server to the servers
                  list
+
+vrf=IFNAME       When this variable is set, the 
+                 connection to the TACACS+ accounting
+                 servers is made through the named
+                 interface.
 
 See the libpam_tacplus README for more information on the tacacs
 protocol.

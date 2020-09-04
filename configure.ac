@@ -38,11 +38,12 @@ dnl --------------------------------------------------------------------
 dnl Checks for libraries. libpam_tacplus(-dev) has to have been installed before
 dnl this is configured and built
 AC_CHECK_LIB(tac, tac_connect)
+AC_CHECK_LIB(cap, cap_init)
 
 dnl --------------------------------------------------------------------
 dnl Checks for header files.
 AC_HEADER_STDC
-AC_CHECK_HEADERS([libaudit.h fcntl.h stdlib.h string.h strings.h sys/socket.h sys/time.h syslog.h unistd.h])
+AC_CHECK_HEADERS([fcntl.h stdlib.h string.h strings.h sys/capability.h sys/socket.h sys/time.h syslog.h unistd.h])
 AC_CHECK_HEADERS([tacplus/libtac.h tacplus/tacplus.h])
 
 

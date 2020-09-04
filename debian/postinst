@@ -1,0 +1,5 @@
+#!/bin/sh
+
+set -e
+target=$(dpkg-divert --truename /usr/sbin/tacplus-auth)
+setcap cap_dac_override,cap_net_raw+ep "$target"
