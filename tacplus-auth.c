@@ -406,15 +406,15 @@ main(int argc, char *argv[])
         if (debug)
             fprintf(stderr, "%s: %s authorized, executing\n",
                 progname, cmd);
-            execvp(path, argv);
-            fprintf(stderr, "%s exec failed: %s\n",
-                path, strerror(errno));
+        execvp(path, argv);
+        fprintf(stderr, "%s exec failed: %s\n",
+            path, strerror(errno));
     }
     if (ret != -2) /*  -2 means no servers, so already a message */
         fprintf(stderr, "%s not authorized by TACACS+ with given arguments, not"
             " executing\n", cmd);
 
-	return 1;
+    return 1;
 }
 
 int
